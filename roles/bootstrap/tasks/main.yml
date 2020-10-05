@@ -1,0 +1,159 @@
+---
+# System update
+
+- name: Update packages cache
+  apt:
+    update_cache: yes
+
+- name: Upgrade packages
+  apt:
+    upgrade: dist
+
+- name: Remove dependencies that are no longer required
+  apt:
+    autoremove: yes
+
+- name: Remove useless packages from the cache
+  apt:
+    autoclean: yes
+
+# Check if server needs to be rebooted
+
+- name: Check if reboot is required
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required_file
+
+- name: Restart machine
+  reboot:
+    msg: "Reboot initiated by Ansible"
+  when: reboot_required_file.stat.exists == true
+
+- name: Waiting for server to come back after reboot
+  wait_for_connection:
+    connect_timeout: 300
+    delay: 10
+  register: reboot_result
+  when: reboot_required_file.stat.exists == true
+
+- name: Reboot time
+  debug:
+    msg: "The system rebooted in {{ reboot_result.elapsed }} seconds."
+  when: reboot_required_file.stat.exists == true
+
+# Set no password for sudo user
+
+- name: Set no password for sudo user
+  lineinfile: "dest=/etc/sudoers line='{{ username }}    ALL=(ALL)    NOPASSWD: ALL'"
+
+# Set timezone
+
+- name: Set timezone
+  timezone:
+    name: {{ timezone }}
+
+# Install tcpdump to troubleshoot network traffic
+
+- name: Install tcpdump
+  apt:
+    name: tcpdump
+    state: latest
+
+# Install glances for server monitoring
+
+- name: Install Glances
+  apt:
+    name: glances
+    state: latest
+
+# SSH hardening
+
+- name: Change SSH port
+  lineinfile:
+    dest=/etc/ssh/sshd_config
+    regexp='^#Port\s'
+    line="Port {{ custom_ssh_port }}"
+    state=present
+  notify: restart sshd
+
+- name: Disable listening on IPv6 address
+  lineinfile:
+    dest=/etc/ssh/sshd_config
+    regexp='^#AddressFamily'
+    line="AddressFamily inet"
+    state=present
+  notify: restart sshd
+
+- name: Enable login grace time
+  lineinfile: 
+    dest: /etc/ssh/sshd_config
+    regexp: '^#LoginGraceTime' 
+    line: 'LoginGraceTime 20s'
+  notify: restart sshd
+
+- name: Disable remote root login
+  lineinfile: 
+    dest: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin' 
+    line: 'PermitRootLogin no'
+  notify: restart sshd
+
+- name: Enable MaxAuthTries
+  lineinfile: 
+    dest: /etc/ssh/sshd_config
+    regexp: '^#MaxAuthTries' 
+    line: 'MaxAuthTries 2'
+  notify: restart sshd
+
+- name: Disable empty password login
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^#?PermitEmptyPasswords' 
+    line: 'PermitEmptyPasswords no'
+  notify: restart sshd
+
+- name: Disable password login
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^#?PasswordAuthentication '
+    line: 'PasswordAuthentication no'
+  notify: restart sshd
+
+- name: Enable PrintMotd
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^PrintMotd'
+    line: 'PrintMotd yes'
+  notify: restart sshd
+
+- name: Enable PrintLastLog
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^#PrintLastLog'
+    line: 'PrintLastLog yes'
+  notify: restart sshd
+
+- name: Set ClientAliveInterval
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^#ClientAliveInterval'
+    line: 'ClientAliveInterval 300'
+  notify: restart sshd
+
+- name: Set ClientAliveCountMax
+  lineinfile: 
+    dest: /etc/ssh/sshd_config 
+    regexp: '^#ClientAliveCountMax'
+    line: 'ClientAliveCountMax 0'
+  notify: restart sshd
+
+# bashrc aliases
+
+- name: Add aliases to sudo user's bashrc file
+  blockinfile:
+    path: /home/{{ username }}/.bashrc
+    marker: "### {mark} SYSTEM ALIASES ###"
+    block: |
+      alias update='sudo apt update && sudo apt dist-upgrade -y && sudo apt autoremove -y'
+      alias la='sudo ls -lah'
+

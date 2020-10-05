@@ -1,0 +1,7 @@
+[debian_servers]
+<SERVER_IP>
+
+[debian_servers:vars]
+ansible_port=22
+ansible_user=<SUDO_USER_NAME>
+ansible_sudo_pass=<SUDO_USER_PASSWORD>
